@@ -1,0 +1,182 @@
+---
+title: "Water_Sources"
+author: "Vivian Guetler"
+date: "5/7/2021"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Source
+
+The data this week comes from Water Point Data Exchange. See <https://data.waterpointdata.org/dataset/Water-Point-Data-Exchange-WPDx-Basic-/jfkt-jmqa>
+
+Also see the Tidy Tuesday  <https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-04/readme.md>
+
+
+Steps for the data analysis
+
+1. Load the libraries
+```{r eval=FALSE}
+library(tidyverse)
+library(lubridate)
+#install.packages("countrycode")
+library(countrycode)
+#install.packages("maps")
+library(maps)
+library(ggmap)
+library(ggthemes)
+#install.packages("sf")
+#install.packages("rnaturalearth")
+#install.packages("rnaturalearthdata")
+#install.packages("rgeos")
+library(rgeos)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+#install.packages("showtext")
+library(showtext); showtext_auto() ; 
+font_add_google("Gochi Hand", "gochi")
+font_add_google("Schoolbell", "bell")
+```
+
+2. Load the data
+
+```{r eval=FALSE}
+water <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-04/water.csv')
+water
+```
+
+## Clean the data 
+
+```{r}
+water_clean <- 
+water %>%
+  mutate(report_date = mdy(report_date)) %>%
+  rename(lat = lat_deg, 
+         lon = lon_deg,
+         country = country_name) %>%
+  separate(water_tech , c("water_tech" , "brand"), sep = " - " , fill = "right") %>%
+  filter(install_year <= 2021,
+         install_year >= 1960,
+         lat < max(africa_map$lat),
+         lat > min(africa_map$lat),
+         lon < max(africa_map$long),
+         lon > min(africa_map$long))
+```
+
+## Visualizations
+```{r}
+africa_map <-
+map_data("world") %>%
+  mutate(continent = countrycode(region , "country.name" , "continent")) %>%
+  filter(continent == "Africa")
+```
+
+```{r}
+water_clean %>%
+ggplot(aes(lon , lat)) +
+  geom_polygon(aes(long , lat , group = group), data = africa_map,
+               fill = "white" , color = "blue") +
+  geom_point(size = 0.1)+
+  theme_map()
+```
+
+## Kenya
+
+# create a subset of Kenya only
+```{r}
+kenya <- water_clean %>%
+ filter(country == "Kenya")
+```
+
+```{r}
+kenya %>%
+  ggplot(aes(lon , lat)) +
+  borders("world" , regions = "Kenya") +
+  geom_point(size = 0.5) +
+  theme_map()
+```
+
+
+# Plot
+```{r}
+water.clean %>%
+  filter(country == "Kenya",
+         between(lat , -0.02 , 4),
+         between(lon , 37.5 , 45)) %>%
+  ggplot(aes(lon , lat)) +
+  borders("world" , regions = "Kenya") +
+  geom_point(size = 0.1) +
+  theme_map()
+```
+
+```{r}
+africa <- water %>%
+  group_by(country_name, status_id) %>% 
+  summarise(n = n()) %>% 
+  drop_na() %>% 
+  mutate(
+    total = sum(n),
+    percent = (n / total) * 100
+  )
+
+
+df_africa <- ne_countries(continent = 'africa', returnclass = "sf")
+
+df_africa_water <- df_africa %>%
+  inner_join(africa, by = c('admin' = 'country_name')) %>% 
+  filter(status_id == 'y')
+```
+
+## Visualize the Africa map
+```{r}
+ggplot() + 
+  geom_sf(data = df_africa, fill = "#ccffff", color = "#f5f5f5", size = 0.5) +
+  geom_sf(data = df_africa_water, aes(fill = percent), color = "#f5f5f5", size = 0.5) +
+  #scale_fill_stepsn(
+   # colours = huitzilin::huitzilin_color_scale('blue', 5), 
+   # breaks = c(20, 40, 60, 80)
+   # ) +
+  labs(
+    title = "Water Point Access in Africa",
+    subtitle = str_wrap("Water access points in Africa where water is available between 1982 to 2020", 40),
+    fill = "% Of Water Sources Found Working:",
+    caption = "Source: Water Point Data Exchange"
+    ) +
+  theme(
+    rect = element_blank(),
+    text = element_text(family = "gochi", size = 8, color = "black"),
+    #plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+    plot.title = element_text(family = "gochi", size = rel(2.5), face = "bold"),
+    plot.subtitle = element_text(size = rel(2)),
+    plot.caption = element_text(size = rel(1), hjust = 0),
+    legend.position = "bottom",
+    legend.justification = c(0, 0),
+    legend.title = element_text(vjust = 0.75),
+    plot.title.position = "plot",
+    plot.caption.position = "plot",
+    axis.text = element_blank(),
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+# Save the plot
+```{r}
+ggsave(
+  width = 8,
+  height = 4.5,
+  filename = "water_source.png",
+  device = "png"
+  )
+
+```
+
+### Visualization inspired by the work of https://github.com/jesadrperez/tidy-tuesday/blob/main/2021-19.Rmd
+
+
+
