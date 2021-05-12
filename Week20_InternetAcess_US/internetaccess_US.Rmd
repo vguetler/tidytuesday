@@ -1,0 +1,291 @@
+---
+title: "Internet Access West Virginia"
+author: "Vivian Guetler"
+date: "5/11/2021"
+output: html_document
+---
+
+### Internet Access in the US
+# Data source: Microsoft
+# Tidytuesday : <https://github.com/rfordatascience/tidytuesday/tree/master/data/2021/2021-05-11>
+
+# Codes inspired by and adapted from: Jesse Mostipak <https://twitter.com/kierisi/status/1391915889331683331> and @leeolney3
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup - Load the packages needed 
+```{r}
+library(tidyverse) #for plotting 
+install.packages("ggridges") #for ridge plots
+library(ggridges)
+library(skimr) # for data analysis
+#install.packages("janitor") #for cleaning column names
+library(janitor)
+install.packages("patchwork") # for combining separate ggplots into same graphic
+library(patchwork)
+#install.packages("wesanderson") # for color palettes
+library(wesanderson)
+library(sf) # for maps
+library(rnaturalearth)
+library(rnaturalearthdata)
+#install.packages("urbnmapr") # for maps
+#library(urbnmapr)
+library(showtext)
+## Loading Google fonts (https://fonts.google.com/)
+font_add_google("Ubuntu", "buntu")
+font_add_google("Oxygen", "oxy")
+## Automatically use showtext to render text
+showtext_auto()
+```
+
+# Load the data
+```{r}
+broadband <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-11/broadband.csv')
+
+broadband_zip <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-11/broadband_zip.csv")
+```
+
+# Glimpse the data
+
+```{r}
+glimpse(broadband)
+```
+```{r}
+glimpse(broadband_zip)
+```
+```{r}
+skim(broadband) #eda/descriptive stats
+```
+
+```{r}
+skim(broadband_zip)
+```
+
+# Standardizing column headers - right now all caps
+
+```{r}
+broadband_new <- broadband %>%
+  janitor::clean_names()
+```
+
+```{r}
+names(broadband_new) # worked, now small letters
+```
+
+# Do the same for the second dataset
+```{r}
+broadband_zip <- broadband_zip %>%
+  janitor::clean_names() #now column names are all small letters
+```
+
+# Analysis
+# What is the distribution of broadband usage by state
+
+# First convert broadband_usage to numeric
+
+```{r}
+broadband_new %>%
+  mutate(broadband_usage = as.numeric(broadband_usage))
+```
+
+# NA's introduced by coercion.... look closer
+
+```{r}
+broadband_new %>%
+  View() # some states have a dash (missing)
+```
+
+# Remove the dash, convert broadband_usage as numeric
+
+```{r}
+broadband_plot <- broadband_new %>%
+  filter(broadband_usage != "-") %>%
+  mutate(broadband_usage = as.numeric(broadband_usage), broadband_availability_per_fcc = as.numeric(broadband_availability_per_fcc))
+```
+
+
+#check avg broadband availability by state
+```{r}
+colnames(broadband_new)
+st_broadband <- broadband_new %>% group_by(st)
+st_broadband <- st_broadband %>% summarise(avg = mean(as.numeric(broadband_availability_per_fcc), na.rm=T))
+
+max_state <- st_broadband$st[which.max(st_broadband$avg)] #max state = CT
+min_state <- st_broadband$st[which.min(st_broadband$avg)] #min state = AR
+```
+
+# Boxplot of broadband_usage by state
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = st, y = broadband_usage)) +
+  geom_boxplot()
+```
+
+# Reorder the plot by median
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) + geom_boxplot()
+```
+
+# make the boxplot easier to read
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) + 
+  geom_boxplot() +
+  theme_bw() +
+  coord_flip()
+
+```
+
+# Try another plot ; ridge plot
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = broadband_usage, y = reorder(st,  broadband_usage))) +
+  geom_density_ridges() +
+  labs(
+    title = "Internet Usage in the US",
+    subtitle = "Percent of people per county that use the internet at broadband speed ",
+    caption = "Source: Microsoft/The Verge")
+```
+
+# Save ridge plot
+
+```{r}
+ggsave ("broadband_ridgeplot", last_plot(), 
+        device = png)
+```
+
+
+# other plots
+
+```{r}
+plot1 <- broadband_plot %>%
+  ggplot(aes(x = broadband_usage, y = reorder(st,  broadband_usage), fill = stat(x))) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis_c(name = "broadband use", option = "C") +
+  labs(
+    title = "Internet Usage in the US",
+    subtitle = "Percent of people per county that use the internet at broadband speed ",
+    caption = "@Vivfiona, Data Source: Microsoft & The Verge",
+    x = "Broadband Usage",
+    y = "State") +
+  theme_minimal(base_size = 10) + 
+  theme(axis.text.y = element_text(vjust = 0))
+  #theme_ridges(grid = FALSE, center_axis_labels = TRUE) # removes the grid
+```
+
+# Save the plot
+
+```{r}
+ggsave (
+  width = 8,
+  height = 4.5,
+  filename = "broadband_ridgeplot.png",
+  device = "png")
+```
+
+
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(y = reorder(st,  broadband_usage))) +
+  geom_bar() +
+  labs(
+    title = "Internet Usage in the US",
+    subtitle = "Percent of people per county that use the internet at broadband speed ",
+    caption = "Source: Microsoft/The Verge")
+```
+
+# Maps
+```{r}
+install.packages("devtools")
+devtools::install_github("UrbanInstitute/urbnmapr")
+library(urbnmapr)
+```
+
+# Get counties map - focus on WV
+```{r}
+counties_wv <- get_urbn_map("counties", sf=TRUE)
+```
+
+```{r}
+glimpse(broadband_plot)
+```
+
+# plot maps of the broadband availability in WV
+```{r}
+pl1 <- counties_wv %>%
+  filter(state_abbv == "WV" ) %>%
+  left_join(broadband_plot, by = "county_name") %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = broadband_availability_per_fcc), color = "#ffffff", size = 0.25) +
+  coord_sf(datum = NA) + 
+  scale_fill_gradientn(labels = scales::percent,
+                       colours = wes_palette("Darjeeling1", 100, type = "continuous"),
+                       na.value = "grey",
+                       trans = "reverse") +
+  theme_minimal(base_size = 10 ) +
+  theme(plot.subtitle = element_text(size = 8, family = "oxy", hjust = 0.5),
+        plot.title = element_text(size = 14, family = "buntu", face = "bold")) +
+  guides(fill = guide_colorbar(title.position = "top",
+                               title.hjust = .5,
+                               reverse = TRUE,
+                               barheight = unit(10, "lines"),
+                               barwidth = unit(.5, "lines"))) +
+  labs(fill ="", title = "Broadband Availability", 
+       subtitle = str_wrap("% of people per county with access to fixed terrestrial broadband at speeds of 25 Mbps/3 Mbps as of the end of 2017"))
+  
+```
+
+# plot map of the broadband usage in WV
+
+```{r}
+pl2 <- counties_wv %>%
+  filter(state_abbv == "WV" ) %>%
+  left_join(broadband_plot, by = "county_name") %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = broadband_usage), color = "#ffffff", size = 0.25) +
+  coord_sf(datum = NA) + 
+  scale_fill_gradientn(labels = scales::percent,
+                       colours = wes_palette("Darjeeling1", 100, type = "continuous"),
+                       na.value = "grey",
+                       trans = "reverse") +
+  theme_minimal(base_size = 10 ) +
+  theme(plot.subtitle = element_text(size = 8, family = "oxy", hjust = 0.5),
+        plot.title = element_text(size = 14, family = "buntu", face = "bold")) +
+  guides(fill = guide_colorbar(title.position = "top",
+                               title.hjust = .5,
+                               reverse = TRUE,
+                               barheight = unit(10, "lines"),
+                               barwidth = unit(.5, "lines"))) +
+  labs(fill ="", title = "Broadband Usage", 
+       subtitle = str_wrap("Percent of people per county that use the internet at broadband speeds", 40))
+
+```
+
+# Combine the 2 plots
+
+```{r}
+pl1 + pl2 + plot_annotation(title = "Internet Access in West Virginia", caption = "#TidyTuesday | @Vivfiona | Data from Microsoft & The Verge") & theme(plot.title = element_text(hjust = 0.5, size = 20, family = "oxy", face = "bold"), plot.caption = element_text(hjust = 0.5))
+```
+
+# save the plots
+
+```{r}
+#ggsave ("broadband_maps",width = 7, height = 5, dpi = 300)
+
+ggsave (
+  width = 9,
+  height = 4.5,
+  filename = "broadband_maps.png",
+  device = "png",
+  dpi = 300)
+```
+
