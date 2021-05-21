@@ -1,0 +1,204 @@
+---
+title: "Ask A Manager Salary Survey"
+author: "Vivian Guetler"
+date: "5/21/2021"
+output: html_document
+---
+
+# This week's TidyTuesday data is from Ask A Manager Survey <https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-18/readme.md>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+
+```{r}
+library(tidyverse)
+library(skimr) # for data analysis
+library(janitor)  #for cleaning column names
+library(patchwork) # for combining separate ggplots into same graphic
+library(scales) #for currency formatting
+library(tidytext)
+library(tilemaps)
+#library(hrbrthemes)
+library(showtext)
+## Loading Google fonts (https://fonts.google.com/)
+font_add_google("Ubuntu", "buntu")
+font_add_google("Oxygen", "oxy")
+## Automatically use showtext to render text
+showtext_auto()
+```
+
+# Load data
+
+```{r}
+survey <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-18/survey.csv')
+```
+
+# Check data
+
+```{r}
+glimpse(survey)
+```
+
+```{r}
+skim(survey)
+```
+```{r}
+survey %>%
+  mutate(age = fct_reorder(how_old_are_you, parse_number(how_old_are_you)))
+```
+
+# race
+```{r}
+survey %>%
+  count(race, sort = T)
+```
+
+
+```{r}
+survey %>%
+  count(industry, sort = T)
+```
+
+# job title
+
+```{r}
+survey %>%
+  count(job_title, sort = T)
+```
+
+# Annual salary in USD
+
+```{r}
+survey_usd <- survey %>%
+  filter(currency == "USD") %>%
+  filter(annual_salary >= 10000,
+         annual_salary <= 1e6)
+```
+
+
+```{r}
+survey_usd %>%
+  ggplot(aes(annual_salary)) +
+  geom_histogram() +
+  scale_x_log10(labels = dollar_format()) +
+  labs( x = "Annual Salary in USD")
+```
+
+# level of education
+```{r}
+survey_usd %>%
+  count(highest_level_of_education_completed, sort = T)
+```
+
+```{r}
+survey_usd %>% 
+  filter(highest_level_of_education_completed == "College degree") %>% 
+  group_by(race) %>% 
+  drop_na(race) %>% 
+  dplyr::summarise(n = n())
+```
+
+
+```{r}
+survey_usd %>%
+  mutate(race = ifelse(race == "Another option not listed here or prefer not to answer", "Other", race),
+         race = fct_lump(race, 5)) %>%
+  filter(!is.na(race)) %>%
+  count(race) %>%
+  mutate(race = fct_reorder(race, n)) %>%
+  ggplot(aes(n, race, fill = race)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = "# of respondents",
+       y = "",
+       title = "Salary Survey",
+       subtitle = "What race were the respondents?",
+       caption = "r")
+```
+
+# save the new race column
+
+```{r}
+survey_usd %>%
+  mutate(race = ifelse(race == "Another option not listed here or prefer not to answer", "Other", race),
+         race = fct_lump(race, 5)) %>%
+  filter(!is.na(race)) %>%
+  count(race) %>%
+  mutate(race = fct_reorder(race, n))
+```
+
+# Salary by education and race
+
+```{r}
+s2 <- survey_usd %>% 
+  filter(!is.na(highest_level_of_education_completed )) %>% 
+  mutate(education = 
+           fct_relevel(highest_level_of_education_completed,
+                       levels = c("High School", "Some college", "College    degree", "Professional degree (MD, JD, etc.)", "Master's degree", "PhD"))) %>% 
+  mutate(race = ifelse(race == "Another option not listed here or prefer not to answer", "Other", race),
+         race = fct_lump(race, 5)) %>%
+  filter(!is.na(race))
+  
+```
+
+
+```{r}
+survey_usd %>%
+  count(highest_level_of_education_completed, sort = F)
+```
+
+
+```{r}
+
+survey2 <- survey %>%
+  filter(!is.na(highest_level_of_education_completed)) %>% 
+  mutate(education = 
+           fct_relevel(highest_level_of_education_completed, 
+                       levels = c("High School", "Some college", "College degree", "Master's degree", "Professional degree (MD, JD, etc.)", "Phd"))) %>%
+  mutate(education = fct_recode(education, 
+                                "Professional degree" = "Professional degree (MD, JD, etc.)")) %>%
+  mutate(race = ifelse(race == "Another option not listed here or prefer not to answer", "Other", race),
+         race = fct_lump(race, 5)) %>%
+   filter(!is.na(race)) %>%
+   mutate_if(is_character, as_factor)
+           
+  
+```
+  
+
+```{r}
+survey2 %>% 
+ggplot(aes(x = education, y = race, fill = annual_salary)) +
+  geom_tile() +
+  labs(y = NULL, x = NULL, title = "Annual Salary by Education and Race",
+       #subtitle = "",
+       caption = "Data Source: Ask a Manager Salary Survey| @Vivfiona" ) +
+  scale_fill_viridis_c(option = "A", name = "Annual Salary (US$)", 
+        limits = c(0, 200000), breaks=c(0, 100000, 200000),
+        labels = dollar_format()) +
+  coord_flip() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(family = "oxy", size = 16),
+        plot.subtitle = element_text(),
+        plot.caption = element_text(size = 8, color = "grey50"),
+        axis.ticks = element_blank(),
+        legend.margin=margin(t = -0.5, unit='cm'),
+#        axis.text.y = element_markdown(face = "bold"),
+        axis.text.x = element_text(angle = 15, margin = margin(5, 0, 0, 0))
+        ) 
+```
+# save the plot
+
+```{r}
+
+ggsave (
+  width = 9,
+  height = 4.5,
+  filename = "salary_survey.png",
+  device = "png",
+  dpi = 300)
+```
+
