@@ -1,0 +1,217 @@
+---
+title: "Mario Kart Data Visualization"
+author: "Vivian Guetler"
+output: html_notebook
+---
+
+The data for this week's TidyTuesday comes from Mario Kart World Records and contains world records for the classic racing game on the Nintendo 64.
+
+Data source: <https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-25/readme.md>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(tidytext)
+library(tilemaps)
+library(showtext)
+library(skimr)
+
+# add fonts
+font_add_google("Odibee Sans", "odibee-sans")
+font_add_google("Rubik", "rubik")
+showtext_auto()
+```
+
+# Load data
+```{r}
+records <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-25/records.csv')
+drivers <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-25/drivers.csv')
+
+```
+
+# View the data
+```{r}
+glimpse(drivers)
+glimpse(records)
+```
+
+# EDA 
+```{r}
+skim(drivers)
+```
+
+```{r}
+skim(records)
+```
+
+# Drivers
+```{r}
+drivers %>%
+  count(player, sort = T)
+```
+
+# Player's nationality - USA leads, followed by Australia and Canada
+```{r}
+drivers %>%
+  count(nation, sort = T)
+```
+
+# Tracks
+```{r}
+records %>%
+  count(track, sort = T)
+```
+# Plots
+
+# First Merge the two datasets
+```{r}
+records_drivers <- records %>%
+  left_join(drivers, by="player") %>%
+  group_by(year) 
+  
+```
+
+# plot records over time
+```{r}
+records_drivers %>%
+  summarise(records = mean(records,na.rm=TRUE)) %>% 
+  ggplot(aes(x = year, y = records)) +
+  geom_line(color="blue") + 
+  geom_point(size = 1.1) +
+  ggthemes::theme_hc(bgcolor = "darkunica") +
+  labs(y = "Average Records",
+       title = "Average Records Over Time")
+```
+
+# Which track is the fastest?
+
+```{r}
+records_drivers %>%
+  group_by(track) %>%
+  summarise(time = median(time)) %>%
+  ggplot(aes(reorder(x = track,time), time)) + 
+  geom_col(fill = "blue") +
+  coord_flip() +
+  labs(y = "Median Time(s)",
+       x = "",
+       title = "Median Time per Track") +
+  theme(legend.position = "bottom",
+        plot.title = element_text(family = "odibee-sans", size = 16),
+        plot.subtitle = element_text(),
+        plot.caption = element_text(size = 8, color = "grey50"),
+        axis.ticks = element_blank(),
+        legend.margin=margin(t = -0.5, unit='cm'))
+```
+
+# remove the missing 
+```{r}
+records_drivers <- filter(records_drivers, !is.na(nation))
+```
+
+```{r}
+records_drivers$count <- 1
+rd2 <- records_drivers %>% 
+  group_by(track, nation) %>% 
+  summarise(all_records = sum(count))
+```
+
+# heat map of tracks and records by country
+
+```{r}
+p1 <- ggplot(data=rd2, aes(x=nation, y=track, fill=all_records)) + 
+  geom_tile() +
+  scale_fill_gradient("Number of\nWorld Records\n", 
+                      low="#feb24c", high="#800026") +
+  labs(subtitle="Mario Kart 61: The number of world records by laps, \n track and players in different countries.\n") +
+  theme(panel.background = element_rect(fill = "#cce6ff"),
+        plot.background = element_rect(fill = "#cce6ff"),
+        legend.background = element_rect(fill = "#cce6ff"),
+        plot.title = element_text(colour = "#800026", size=20, face="bold", hjust = 0, family="odibee-sans"),
+        plot.subtitle = element_text(colour = "#800026", size=10, hjust = 0, family="rubik"),
+        legend.position="right",
+        plot.margin = unit(c(0.5, 0.3, 0.3, 0.3), "cm"), #top, right, bottom, left
+        legend.spacing.x = unit(0.5,"cm"),
+        legend.title = element_text(colour = "#800026", size=10, hjust = 0.5, family="odibee-sans"),
+        legend.text = element_text(colour="#800026", size=10, family="rubik", hjust = 0.5),
+        axis.title.x= element_blank(),
+        axis.title.y= element_blank(),
+        axis.text.x=element_text(colour = "#800026", size=10, 
+                                 hjust = 0, vjust=0.5, family="rubik", angle=-90),
+        axis.text.y=element_text(colour = "#800026", size=10, 
+                                 hjust = 1, family="rubik"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+  )
+
+                    
+```
+
+# top 10 players
+```{r}
+p2 <-drivers %>% 
+  group_by(player) %>%
+  summarise(record_count = sum(records,na.rm = TRUE)) %>% 
+  arrange(desc(record_count)) %>% 
+  head(10) %>%
+  ggplot(aes(reorder(player,record_count),record_count, fill=player)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "",
+       y = "Record Count",
+       subtitle = "Top 10 players\nwith the most world records\n") +
+  theme(panel.background = element_rect(fill = "#cce6ff"),
+        plot.background = element_rect(fill = "#cce6ff"),
+        plot.title = element_text(colour = "#800026", size=20, face="bold", hjust = 0, family="odibee-sans"),
+        plot.subtitle = element_text(colour = "#800026", size=10, hjust = 0, family="rubik"),
+        legend.position="none",
+        plot.margin = unit(c(0.5, 0.3, 0.3, 0.3), "cm"), #top, right, bottom, left
+        axis.title.x= element_blank(),
+        axis.title.y= element_blank(),
+        axis.text.x=element_text(colour = "#800026", size=10, 
+                                 hjust = 0, vjust=0, family="rubik"),
+        axis.text.y=element_text(colour = "#800026", size=10, 
+                                 hjust = 0, family="rubik"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+  )
+```
+
+
+# Combine plots
+
+```{r}
+plots <- p1 + p2 + plot_layout(ncol = 2) +
+  plot_annotation(
+    caption = '@vivfiona | TidyTuesday | Data: Mario Kart World Records',
+    title = '\nMARIO KART WORLD RECORDS') &
+  theme(panel.background = element_rect(fill = "#e5e7e9", colour="#e5e7e9"),
+        plot.background = element_rect(fill = "#e5e7e9", colour="#e5e7e9"),
+        plot.title = element_text(colour = "#800026", size=20, face="bold", hjust = 0.5, family="odibee-sans"),
+        plot.caption = element_text(colour = "#800026", size=10, hjust = 1, family="rubik"))
+
+
+```
+
+# Save the plots
+
+```{r}
+ggsave (
+  width = 9,
+  height = 4.5,
+  filename = "mariokart.png",
+  device = "png",
+  dpi = 300)
+```
+
+
