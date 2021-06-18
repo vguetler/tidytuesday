@@ -1,0 +1,119 @@
+---
+title: "DuBoisChallenge"
+author: "Vivian Guetler"
+date: "6/17/2021"
+output: html_document
+---
+
+# Du Bois Challenge
+## This week's TidyTuesday is based on the WEBDuBoisChallenge. All credit goes to Anthony, Allen, and Sekou for the preparation of  datasets/challenge.
+
+## Data and style sources:
+https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-02-16/readme.md
+
+https://github.com/ajstarks/dubois-data-portraits/blob/master/dubois-style.pdf
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
+```
+
+# Load libraries
+
+```{r libraries}
+library(tidyverse)     
+library(lubridate)    
+library(ggthemes) 
+library(janitor)
+library(readr)
+library(scales)
+library(gplots)
+library(patchwork)
+library(skimr)
+library(showtext); showtext_auto() ; 
+font_add_google("Public Sans", "publicsans")
+font_add_google("Schoolbell", "bell")
+```
+
+## Load data
+
+
+```{r, echo=FALSE}
+conjugal <- conjugal <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-16/conjugal.csv')
+
+```
+
+# View the data
+```{r}
+glimpse(conjugal)
+```
+
+```{r}
+skim(conjugal)
+```
+
+# Data processing
+
+# Change column names to all caps
+```{r}
+conjugal <- conjugal %>%
+  clean_names("all_caps")
+```
+
+# Change into long form 
+```{r}
+conjugal2 <- conjugal %>%
+  pivot_longer(cols = c(SINGLE, MARRIED, `DIVORCED_AND_WIDOWED`), names_to = "status", values_to = "proportion")
+```
+
+# View the processed data
+
+```{r}
+glimpse(conjugal2)
+```
+
+# Plot using the DuBois' original bar graph style
+
+```{r}
+knitr::include_graphics("https://github.com/ajstarks/dubois-data-portraits/blob/master/challenge/challenge02/original-plate-10.jpg?raw=true")
+```
+
+
+```{r}
+conjugal2 %>%
+  ggplot(aes(y = fct_relevel(POPULATION, levels= c("Negroes", "Germany")), x = proportion, fill = status)) +
+  geom_col() +
+  facet_wrap(vars(AGE), ncol = 1) +
+  scale_fill_manual(values = c("#00aa00" , "#ffd700", "#dc143c")) +
+  guides(fill = guide_legend(reverse=TRUE)) + #reverse the legend order
+  labs(x = "",
+       y = "", 
+       fill = "",
+       title = "CONJUGAL CONDITION",
+       caption = "@Vivfiona | Data source: Anthony Starks, Allen Hillery Sekou Tyler, #DuBoisChallenge 2021",
+       plot.caption = element_text(hjust = 0.5)) +
+  theme_minimal () +
+  theme(legend.position = "top",
+        legend.text = element_text(family = "publicsans"),
+        plot.background = element_rect(fill = "#e5d5c5"),
+        plot.title = element_text(family = "publicsans", hjust = 0.5),
+        panel.grid = element_blank()) +
+  geom_text(aes(label = scales::percent(round(proportion/100, 2))),
+            position = position_stack(.5), cex = 2, color = "black")
+   
+```
+
+# save the plot
+
+```{r}
+ggsave (
+  width = 9,
+  height = 4.5,
+  filename = "conjugal.png",
+  device = "png",
+  dpi = 300)
+```
+
+
+  
+```
+
